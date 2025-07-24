@@ -188,7 +188,7 @@ export class ProductCard extends Component {
 
   /**
    * Hide the variant images that are not for the selected variant.
-   */
+  */
   #updateVariantImages() {
     const { slideshow } = this.refs;
     if (!this.variantPicker?.selectedOption) {
@@ -196,14 +196,19 @@ export class ProductCard extends Component {
     }
 
     const selectedImageId = this.variantPicker?.selectedOption.dataset.optionMediaId;
+    const variantId = this.variantPicker?.selectedOption.dataset.variantId;
 
-    if (slideshow && selectedImageId) {
+    if (slideshow && (selectedImageId || variantId)) {
       const { slides = [] } = slideshow.refs;
 
       for (const slide of slides) {
         if (slide.getAttribute('variant-image') == null) continue;
-
-        slide.hidden = slide.getAttribute('slide-id') !== selectedImageId;
+        const variantIds = slide.dataset.variantIds?.split(',');
+        if (variantIds && variantIds.length > 0) {
+          slide.hidden = !variantIds.includes(variantId);
+        } else {
+          slide.hidden = slide.getAttribute('slide-id') !== selectedImageId;
+        }
       }
     }
   }
@@ -306,6 +311,18 @@ export class ProductCard extends Component {
     }
 
     const id = this.variantPicker.selectedOption.dataset.optionMediaId;
+    const variantId = this.variantPicker.selectedOption.dataset.variantId;
+
+    const { slides = [] } = slideshow.refs;
+    const firstVariantSlide = slides.find(
+      (s) => s.dataset.variantIds?.split(',').includes(variantId)
+    );
+
+    if (firstVariantSlide) {
+      slideshow.select({ id: firstVariantSlide.getAttribute('slide-id') }, undefined, { animate: false });
+      return;
+    }
+
     if (!id) {
       slideshow.previous(undefined, { animate: false });
       return;
