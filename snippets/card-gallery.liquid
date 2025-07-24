@@ -164,6 +164,10 @@
         {% assign hidden = false %}
         {% if variant_images contains media.src %}
           {% assign attributes = 'variant-image' %}
+          {% assign variant_ids = media.variant_ids | default: media.preview_image.variant_ids %}
+          {% if variant_ids != blank %}
+            {% capture attributes %}{{ attributes }} data-variant-ids="{{ variant_ids | join: ',' }}"{% endcapture %}
+          {% endif %}
           {% unless forloop.first and media.src == selected_variant_image or has_generic_media == false %}
             {% assign hidden = true %}
           {% endunless %}
