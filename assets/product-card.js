@@ -187,6 +187,17 @@ export class ProductCard extends Component {
   }
 
   /**
+   * Decodes HTML entities from a string.
+   * @param {string} html
+   * @returns {string}
+   */
+  #decodeHtml(html) {
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    return div.textContent || '';
+  }
+
+  /**
    * Hide the variant images that are not for the selected variant.
   */
   #updateVariantImages() {
@@ -211,7 +222,7 @@ export class ProductCard extends Component {
       for (const slide of slides) {
         if (slide.getAttribute('variant-image') == null) continue;
         const variantIds = slide.dataset.variantIds?.split(',');
-        const altName = (slide.dataset.variantAlt || '').toLowerCase();
+        const altName = this.#decodeHtml(slide.dataset.variantAlt || '').toLowerCase();
         if (variantIds && variantIds.length > 0) {
           slide.hidden =
             !variantIds.includes(variantId) &&
@@ -335,7 +346,7 @@ export class ProductCard extends Component {
     const { slides = [] } = slideshow.refs;
     const firstVariantSlide = slides.find((s) => {
       const ids = s.dataset.variantIds?.split(',');
-      const altName = (s.dataset.variantAlt || '').toLowerCase();
+      const altName = this.#decodeHtml(s.dataset.variantAlt || '').toLowerCase();
       return (
         (ids && ids.includes(variantId)) ||
         (variantName && altName.includes(variantName))
