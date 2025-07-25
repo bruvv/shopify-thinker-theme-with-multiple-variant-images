@@ -155,6 +155,7 @@
         {% endif %}
 
         {% assign attributes = '' %}
+        {% assign variant_alt = media.alt | escape %}
         {% capture slideshow_children %}
           {%- render 'product-media', media: media, sizes: sizes, loading: loading, preview_image_only: true -%}
         {% endcapture %}
@@ -172,6 +173,7 @@
             {% assign hidden = true %}
           {% endunless %}
         {% endif %}
+        {% capture attributes %}{{ attributes }} data-variant-alt="{{ variant_alt }}"{% endcapture %}
         {% render 'slideshow-slide', slide_id: media.id, index: forloop.index, children: slideshow_children, class: class, attributes: attributes, hidden: hidden, media_fit: media_fit %}
       {% endfor %}
     {% endcapture %}

@@ -187,6 +187,17 @@ export class ProductCard extends Component {
   }
 
   /**
+   * Decodes HTML entities from a string.
+   * @param {string} html
+   * @returns {string}
+   */
+  #decodeHtml(html) {
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    return div.textContent || '';
+  }
+
+  /**
    * Hide the variant images that are not for the selected variant.
   */
   #updateVariantImages() {
@@ -197,6 +208,13 @@ export class ProductCard extends Component {
 
     const selectedImageId = this.variantPicker?.selectedOption.dataset.optionMediaId;
     const variantId = this.variantPicker?.selectedOption.dataset.variantId;
+    const variantName = (
+      this.variantPicker?.selectedOption.getAttribute('aria-label') ||
+      this.variantPicker?.selectedOption.textContent ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
 
     if (slideshow && (selectedImageId || variantId)) {
       const { slides = [] } = slideshow.refs;
@@ -204,6 +222,13 @@ export class ProductCard extends Component {
       for (const slide of slides) {
         if (slide.getAttribute('variant-image') == null) continue;
         const variantIds = slide.dataset.variantIds?.split(',');
+        const altName = this.#decodeHtml(slide.dataset.variantAlt || '').toLowerCase();
+        if (variantIds && variantIds.length > 0) {
+          slide.hidden =
+            !variantIds.includes(variantId) &&
+            !(variantName && altName.includes(variantName));
+        } else if (variantName) {
+          slide.hidden = !altName.includes(variantName);
         if (variantIds && variantIds.length > 0) {
           slide.hidden = !variantIds.includes(variantId);
         } else {
@@ -312,6 +337,23 @@ export class ProductCard extends Component {
 
     const id = this.variantPicker.selectedOption.dataset.optionMediaId;
     const variantId = this.variantPicker.selectedOption.dataset.variantId;
+    const variantName = (
+      this.variantPicker.selectedOption.getAttribute('aria-label') ||
+      this.variantPicker.selectedOption.textContent ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
+
+    const { slides = [] } = slideshow.refs;
+    const firstVariantSlide = slides.find((s) => {
+      const ids = s.dataset.variantIds?.split(',');
+      const altName = this.#decodeHtml(s.dataset.variantAlt || '').toLowerCase();
+      return (
+        (ids && ids.includes(variantId)) ||
+        (variantName && altName.includes(variantName))
+      );
+    });
 
     const { slides = [] } = slideshow.refs;
     const firstVariantSlide = slides.find(
