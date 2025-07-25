@@ -229,6 +229,8 @@ export class ProductCard extends Component {
             !(variantName && altName.includes(variantName));
         } else if (variantName) {
           slide.hidden = !altName.includes(variantName);
+        if (variantIds && variantIds.length > 0) {
+          slide.hidden = !variantIds.includes(variantId);
         } else {
           slide.hidden = slide.getAttribute('slide-id') !== selectedImageId;
         }
@@ -352,6 +354,11 @@ export class ProductCard extends Component {
         (variantName && altName.includes(variantName))
       );
     });
+
+    const { slides = [] } = slideshow.refs;
+    const firstVariantSlide = slides.find(
+      (s) => s.dataset.variantIds?.split(',').includes(variantId)
+    );
 
     if (firstVariantSlide) {
       slideshow.select({ id: firstVariantSlide.getAttribute('slide-id') }, undefined, { animate: false });
