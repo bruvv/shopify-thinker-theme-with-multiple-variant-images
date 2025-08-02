@@ -13,7 +13,40 @@
   assign first_3d_model = selected_product.media | where: 'media_type', 'model' | first
 
   if block.settings.hide_variants
-    assign variant_images = product.images | where: 'attached_to_variant?', true | map: 'src'
+    assign variant_names = ''
+    for option in selected_product.options_with_values
+      for value in option.values
+        assign variant_names = variant_names | append: value.name | append: ','
+      endfor
+    endfor
+    assign variant_names = variant_names | downcase | split: ',' | uniq | compact
+
+    assign selected_variant = selected_product.selected_or_first_available_variant
+    assign selected_variant_options = selected_variant.options | join: ',' | downcase | split: ','
+    assign other_variant_images = ''
+
+    for image in selected_product.images
+      assign alt_text = image.alt | downcase
+
+      if image.attached_to_variant?
+        if image.variants contains selected_variant
+          if selected_variant_media == blank
+            assign selected_variant_media = image
+          endif
+        else
+          assign other_variant_images = other_variant_images | append: image.src | append: ','
+        endif
+      elsif variant_names contains alt_text
+        if selected_variant_options contains alt_text
+          if selected_variant_media == blank
+            assign selected_variant_media = image
+          endif
+        else
+          assign other_variant_images = other_variant_images | append: image.src | append: ','
+        endif
+      endif
+    endfor
+    assign other_variant_images = other_variant_images | split: ',' | uniq | compact
   endif
 
   if block.settings.slideshow_controls_style == 'thumbnails'
@@ -85,7 +118,7 @@
     assign sorted_media = sorted_media | concat: selected_product.media | where: 'id', selected_variant_media.id
 
     for media in selected_product.media
-      if block.settings.hide_variants and variant_images contains media.src and sorted_media.size > 0
+      if block.settings.hide_variants and other_variant_images contains media.src and sorted_media.size > 0
         continue
       endif
 
