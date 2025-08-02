@@ -1,6 +1,7 @@
+import { OverflowList } from '@theme/critical';
 import VariantPicker from '@theme/variant-picker';
 import { Component } from '@theme/component';
-import { debounce, isDesktopBreakpoint, mediaQueryLarge } from '@theme/utilities';
+import { debounce, isDesktopBreakpoint, mediaQueryLarge, requestYieldCallback } from '@theme/utilities';
 import { ThemeEvents, VariantSelectedEvent, VariantUpdateEvent, SlideshowSelectEvent } from '@theme/events';
 import { morph } from '@theme/morph';
 
@@ -123,7 +124,36 @@ export class ProductCard extends Component {
 
     this.#updateVariantImages();
     this.#previousSlideIndex = null;
+
+    // Remove attribute after re-rendering since a variant selection has been made
+    this.removeAttribute('data-no-swatch-selected');
+
+    // Force overflow list to reflow after variant update
+    // This fixes an issue where the overflow counter doesn't update properly in some browsers
+    this.#updateOverflowList();
   };
+
+  /**
+   * Forces the overflow list to recalculate by dispatching a reflow event.
+   * This ensures the overflow counter displays correctly after variant updates.
+   */
+  #updateOverflowList() {
+    // Find the overflow list in the variant picker
+    const overflowList = this.querySelector('swatches-variant-picker-component overflow-list');
+    const isActiveOverflowList = overflowList?.querySelector('[slot="overflow"]') ? true : false;
+    if (!overflowList || !isActiveOverflowList) return;
+
+    // Use requestAnimationFrame to ensure DOM has been updated
+    requestAnimationFrame(() => {
+      // Dispatch a reflow event to trigger recalculation
+      overflowList.dispatchEvent(
+        new CustomEvent('reflow', {
+          bubbles: true,
+          detail: {},
+        })
+      );
+    });
+  }
 
   /**
    * Updates the DOM with a new price.
@@ -156,7 +186,16 @@ export class ProductCard extends Component {
       // If the href is empty, don't update the product URL eg: unavailable variant
       if (anchorElement.getAttribute('href')?.trim() === '') return;
 
-      this.refs.productCardLink.href = anchorElement.href;
+      const productUrl = anchorElement.href;
+      const { productCardLink, productTitleLink, cardGalleryLink } = this.refs;
+
+      productCardLink.href = productUrl;
+      if (cardGalleryLink instanceof HTMLAnchorElement) {
+        cardGalleryLink.href = productUrl;
+      }
+      if (productTitleLink instanceof HTMLAnchorElement) {
+        productTitleLink.href = productUrl;
+      }
     }
   }
 
@@ -187,19 +226,8 @@ export class ProductCard extends Component {
   }
 
   /**
-   * Decodes HTML entities from a string.
-   * @param {string} html
-   * @returns {string}
-   */
-  #decodeHtml(html) {
-    const div = document.createElement('div');
-    div.innerHTML = html;
-    return div.textContent || '';
-  }
-
-  /**
    * Hide the variant images that are not for the selected variant.
-  */
+   */
   #updateVariantImages() {
     const { slideshow } = this.refs;
     if (!this.variantPicker?.selectedOption) {
@@ -207,34 +235,17 @@ export class ProductCard extends Component {
     }
 
     const selectedImageId = this.variantPicker?.selectedOption.dataset.optionMediaId;
-    const variantId = this.variantPicker?.selectedOption.dataset.variantId;
-    const variantName = (
-      this.variantPicker?.selectedOption.getAttribute('aria-label') ||
-      this.variantPicker?.selectedOption.textContent ||
-      ''
-    )
-      .trim()
-      .toLowerCase();
 
-    if (slideshow && (selectedImageId || variantId)) {
+    if (slideshow && selectedImageId) {
       const { slides = [] } = slideshow.refs;
 
       for (const slide of slides) {
         if (slide.getAttribute('variant-image') == null) continue;
-        const variantIds = slide.dataset.variantIds?.split(',');
-        const altName = this.#decodeHtml(slide.dataset.variantAlt || '').toLowerCase();
-        if (variantIds && variantIds.length > 0) {
-          slide.hidden =
-            !variantIds.includes(variantId) &&
-            !(variantName && altName.includes(variantName));
-        } else if (variantName) {
-          slide.hidden = !altName.includes(variantName);
-        if (variantIds && variantIds.length > 0) {
-          slide.hidden = !variantIds.includes(variantId);
-        } else {
-          slide.hidden = slide.getAttribute('slide-id') !== selectedImageId;
-        }
+
+        slide.hidden = slide.getAttribute('slide-id') !== selectedImageId;
       }
+
+      slideshow.select({ id: selectedImageId }, undefined, { animate: false });
     }
   }
 
@@ -325,52 +336,25 @@ export class ProductCard extends Component {
 
     if (!slideshow) return;
 
+    // If we have a selected variant, always use its image
+    if (this.variantPicker?.selectedOption) {
+      const id = this.variantPicker.selectedOption.dataset.optionMediaId;
+      if (id) {
+        slideshow.select({ id }, undefined, { animate: false });
+        return;
+      }
+    }
+
+    // No variant selected - use initial slide if it's valid
     const initialSlide = slideshow.initialSlide;
     const slideId = initialSlide?.getAttribute('slide-id');
     if (initialSlide && slideshow.slides?.includes(initialSlide) && slideId) {
       slideshow.select({ id: slideId }, undefined, { animate: false });
       return;
-    } else if (!this.variantPicker?.selectedOption) {
-      slideshow.previous(undefined, { animate: false });
-      return;
     }
 
-    const id = this.variantPicker.selectedOption.dataset.optionMediaId;
-    const variantId = this.variantPicker.selectedOption.dataset.variantId;
-    const variantName = (
-      this.variantPicker.selectedOption.getAttribute('aria-label') ||
-      this.variantPicker.selectedOption.textContent ||
-      ''
-    )
-      .trim()
-      .toLowerCase();
-
-    const { slides = [] } = slideshow.refs;
-    const firstVariantSlide = slides.find((s) => {
-      const ids = s.dataset.variantIds?.split(',');
-      const altName = this.#decodeHtml(s.dataset.variantAlt || '').toLowerCase();
-      return (
-        (ids && ids.includes(variantId)) ||
-        (variantName && altName.includes(variantName))
-      );
-    });
-
-    const { slides = [] } = slideshow.refs;
-    const firstVariantSlide = slides.find(
-      (s) => s.dataset.variantIds?.split(',').includes(variantId)
-    );
-
-    if (firstVariantSlide) {
-      slideshow.select({ id: firstVariantSlide.getAttribute('slide-id') }, undefined, { animate: false });
-      return;
-    }
-
-    if (!id) {
-      slideshow.previous(undefined, { animate: false });
-      return;
-    }
-
-    slideshow.select({ id }, undefined, { animate: false });
+    // No valid initial slide or selected variant - go to previous
+    slideshow.previous(undefined, { animate: false });
   };
 
   /**
@@ -392,10 +376,10 @@ export class ProductCard extends Component {
     // Don't navigate if this product card is marked as no-navigation (e.g., in theme editor)
     if (this.hasAttribute('data-no-navigation')) return;
 
-    const interactiveElement = event.target.closest('button, input, label, select, a, [tabindex="1"]');
+    const interactiveElement = event.target.closest('button, input, label, select, [tabindex="1"]');
 
-    // If the click was on an interactive element which is not the main link, do nothing.
-    if (interactiveElement && interactiveElement !== this.refs.productCardLink) {
+    // If the click was on an interactive element, do nothing.
+    if (interactiveElement) {
       return;
     }
 
@@ -414,10 +398,16 @@ export class ProductCard extends Component {
     }
 
     if (!window.Shopify.designMode) {
-      history.replaceState({}, '', url.toString());
+      requestYieldCallback(() => {
+        history.replaceState({}, '', url.toString());
+      });
     }
 
-    this.#navigateToURL(event, linkURL);
+    const targetLink = event.target.closest('a');
+    // Let the native navigation handle the click if it was on a link.
+    if (!targetLink) {
+      this.#navigateToURL(event, linkURL);
+    }
   };
 
   /**
@@ -439,6 +429,73 @@ if (!customElements.get('product-card')) {
  * @extends {VariantPicker<SwatchesRefs>}
  */
 class SwatchesVariantPickerComponent extends VariantPicker {
+  connectedCallback() {
+    super.connectedCallback();
+
+    // Cache the parent product card
+    this.parentProductCard = this.closest('product-card');
+
+    // Listen for variant updates to apply pending URL changes
+    this.addEventListener(ThemeEvents.variantUpdate, this.#handleCardVariantUrlUpdate.bind(this));
+  }
+
+  /**
+   * Updates the card URL when a variant is selected.
+   */
+  #handleCardVariantUrlUpdate() {
+    if (this.pendingVariantId && this.parentProductCard instanceof ProductCard) {
+      const currentUrl = new URL(this.parentProductCard.refs.productCardLink.href);
+      currentUrl.searchParams.set('variant', this.pendingVariantId);
+      this.parentProductCard.refs.productCardLink.href = currentUrl.toString();
+      this.pendingVariantId = null;
+    }
+  }
+
+  /**
+   * Override the variantChanged method to handle unavailable swatches with available alternatives.
+   * @param {Event} event - The variant change event.
+   */
+  variantChanged(event) {
+    if (!(event.target instanceof HTMLElement)) return;
+
+    // Check if this is a swatch input
+    const isSwatchInput = event.target instanceof HTMLInputElement && event.target.name?.includes('-swatch');
+    const clickedSwatch = event.target;
+    const availableCount = parseInt(clickedSwatch.dataset.availableCount || '0');
+    const firstAvailableVariantId = clickedSwatch.dataset.firstAvailableOrFirstVariantId;
+
+    // For swatch inputs, check if we need special handling
+    if (isSwatchInput && availableCount > 0 && firstAvailableVariantId) {
+      // If this is an unavailable variant but there are available alternatives
+      // Prevent the default handling
+      event.stopPropagation();
+
+      // Update the selected option visually
+      this.updateSelectedOption(clickedSwatch);
+
+      // Build request URL with the first available variant
+      const productUrl = this.dataset.productUrl?.split('?')[0];
+
+      if (!productUrl) return;
+
+      const url = new URL(productUrl, window.location.origin);
+      url.searchParams.set('variant', firstAvailableVariantId);
+      url.searchParams.set('section_id', 'section-rendering-product-card');
+
+      const requestUrl = url.href;
+
+      // Store the variant ID we want to apply to the URL
+      this.pendingVariantId = firstAvailableVariantId;
+
+      // Use parent's fetch method
+      this.fetchUpdatedSection(requestUrl);
+      return;
+    }
+
+    // For all other cases, use the default behavior
+    super.variantChanged(event);
+  }
+
   /**
    * Shows all swatches.
    * @param {Event} [event] - The event that triggered the show all swatches.
